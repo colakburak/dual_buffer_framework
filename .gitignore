@@ -1,0 +1,9 @@
+venv/
+__pycache__/
+
+SMD_test_label.npy
+SMD_test_label.pkl
+SMD_test.npy
+SMD_test.pkl
+SMD_train.npy
+SMD_train.pkl

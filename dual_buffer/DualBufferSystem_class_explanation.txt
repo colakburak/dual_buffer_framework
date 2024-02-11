@@ -1,0 +1,41 @@
+Class DualBufferSystem
+    Initialize:
+        - Define active_buffer and processing_buffer as deque with maxlen=window_size
+        - Set window_size
+        - Define processing_function for data processing
+        - Create a threading Event: process_event
+        - Define a Lock: lock
+        - Initialize data_ingestion_thread and processing_thread as Thread objects
+
+    Method start:
+        - Start data_ingestion_thread
+        - Start processing_thread
+
+    Method run_ingest_data:
+        - Run the ingest_data method as an asyncio coroutine
+
+    Coroutine ingest_data:
+        - Establish WebSocket connection
+        - Continuously listen for incoming data
+            - Receive data from WebSocket
+            - Parse data using parse_data method
+            - Add parsed data to active_buffer
+            - If active_buffer is full:
+                - Switch buffers using switch_buffers method
+                - Signal processing thread using process_event
+
+    Method process_data:
+        - Continuously check for process_event signal
+        - When signaled:
+            - Process data in processing_buffer using processing_function
+            - Clear processing_buffer
+
+    Method switch_buffers:
+        - Swap active_buffer with processing_buffer
+
+    Static Method parse_data(data):
+        - Parse incoming data to desired format (e.g., convert JSON to Python dictionary)
+
+    Method shutdown:
+        - Ensure all data in buffers are processed before shutting down
+        - Join data_ingestion_thread and processing_thread
