@@ -23,8 +23,9 @@ The server is set up using FastAPI and streams data to clients over a WebSocket 
 1. Navigate to the `stream-the-data` directory.
 2. Install dependencies: `pip install -r requirements.txt` (if available).
 3. Navigate to the `dataset/SMD` directory.
-4. Unzip everything in the `SMD_dataset.zip`.
-5. Run the server: `python main.py`.
+4. Download the `SMD_dataset.zip` from [this link](https://drive.google.com/file/d/1DLo_BRI1f0R0VRV2hz5X60jfAlZ1ee0D/view?usp=sharing).
+5. Unzip `SMD_dataset.zip` in the `dataset/SMD` directory.
+6. Run the server: `python main.py`.
 
 The server listens on all network interfaces (`0.0.0.0`) at port `8000`.
 
