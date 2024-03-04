@@ -1,53 +1,27 @@
 from dual_buffer import DualBufferSystem
+import asyncio
 
-# -- Example Proccess Data Function --
-def process_sensor_data(data_buffer):
-    """
-    Process data buffer and check each data point for anomalies.
-    """
-    print("Processing data buffer...")
-    for data_point in data_buffer:
-        if is_anomalous(data_point):
-            alert_system(data_point)
-
-def is_anomalous(data_point):
-    """
-    Determine if a data point is anomalous.
-    """
-    # Print the data point for testing and debugging
-    print(f"Checking if data point is anomalous: {data_point}")
-
-    # Define a threshold for anomaly detection
-    threshold_value = 0.8  # Example threshold, adjust as needed
-
-    # Assuming data_point is a dictionary and we are interested in a 'sensor_value'
-    sensor_value = data_point.get('sensor_value', 0)
-
-    # Check if the sensor value exceeds the threshold
-    is_anomaly = sensor_value > threshold_value
-
-    # For testing, print whether the data point is anomalous
-    if is_anomaly:
-        print(f"Anomaly detected: {data_point}")
-    else:
-        print(f"Data point is normal: {data_point}")
-
-    return is_anomaly
-
-def alert_system(data_point):
-    """
-    Alert system for anomalous data points.
-    """
-    # Print an alert message for testing
-    print(f"Anomaly detected: {data_point}")
-# -- END --
+def process_data(processing_buffer):
+    total_data_points = sum(len(batch) for batch in processing_buffer)
+    print(f"Processing a total of {total_data_points} data points from {len(processing_buffer)} batches...")
 
 
 def main():
-    window_size = 100
-    ws_connection_uri = "ws://127.0.0.1:8000/ws"
-    dual_buffer_system = DualBufferSystem(window_size, process_sensor_data, ws_connection_uri)
+    # WebSocket connection URI
+    ws_conn_uri = "ws://127.0.0.1:8000/ws"
+
+    # Initialize the DualBufferSystem with a window size of 100 data points
+    dual_buffer_system = DualBufferSystem(window_size=100, processing_function=process_data, ws_conn_uri=ws_conn_uri)
+
+    # Start the DualBufferSystem
     dual_buffer_system.start()
+
+    # Run for a short period then shut down for demonstration purposes
+    try:
+        asyncio.get_event_loop().run_forever()
+    except KeyboardInterrupt:
+        print("Shutting down...")
+        dual_buffer_system.shutdown()
 
 
 if __name__ == "__main__":
