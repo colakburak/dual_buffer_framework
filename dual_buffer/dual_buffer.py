@@ -4,11 +4,12 @@ import asyncio
 import websockets
 
 class DualBufferSystem:
-    def __init__(self, window_size, processing_function):
+    def __init__(self, window_size, processing_function, ws_conn_uri):
         self.active_buffer = deque(maxlen=window_size)
         self.processing_buffer = deque(maxlen=window_size)
         self.window_size = window_size
         self.processing_function = processing_function
+        self.ws_conn_uri = ws_conn_uri
         self.process_event = threading.Event()
         self.lock = threading.Lock()
         self.data_ingestion_thread = threading.Thread(target=self.ingest_data)
@@ -27,7 +28,7 @@ class DualBufferSystem:
         Asynchronously listen to WebSocket and append data to the active buffer.
         If active_buffer size reaches window_size, switch buffers and signal processing.
         """
-        async with websockets.connect('ws://127.0.0.1:8000/ws') as websocket:
+        async with websockets.connect(self.ws_conn_uri) as websocket:
             while True:
                 data = await websocket.recv()  # Receive data from WebSocket
                 data_point = self.parse_data(data)  # Parse data to desired format

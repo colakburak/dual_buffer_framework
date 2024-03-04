@@ -34,19 +34,19 @@ def is_anomalous(data_point):
 
     return is_anomaly
 
-
 def alert_system(data_point):
     """
     Alert system for anomalous data points.
     """
     # Print an alert message for testing
     print(f"Anomaly detected: {data_point}")
-
+# -- END --
 
 
 def main():
     window_size = 100
-    dual_buffer_system = DualBufferSystem(window_size, process_sensor_data)
+    ws_connection_uri = "ws://127.0.0.1:8000/ws"
+    dual_buffer_system = DualBufferSystem(window_size, process_sensor_data, ws_connection_uri)
     dual_buffer_system.start()
 
 
