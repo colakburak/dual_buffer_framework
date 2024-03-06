@@ -2,15 +2,13 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 import asyncio
 import uvicorn
-
 import numpy as np
 import json
-
-from tqdm import tqdm  # Import tqdm for the progress bar
+from tqdm import tqdm
 
 app = FastAPI()
 
-# Setup CORS
+# Setup CORS (unchanged)
 origins = [
     "http://localhost",
     "http://localhost:8000",
@@ -31,29 +29,25 @@ labels = np.load("./dataset/SMD/SMD_test_label.npy")
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    send_data = False  # Initially not sending data
+    send_data = False
     try:
         while True:
-            # Wait for a message from the client
             data_request = await websocket.receive_text()
             request = json.loads(data_request)
 
-            # Handle start command
             if request.get("command") == "start":
-                send_data = True  # Set flag to start sending data
-                batch_size = request.get("batch_size", 10)  # Default batch size
-                start_index = request.get("start_index", 0)  # Default start index
+                send_data = True 
+                batch_size = request.get("batch_size", 10)   
+                start_index = request.get("start_index", 0)
 
-                # Calculate total progress steps
                 total_steps = (len(data) - start_index) // batch_size + \
-                              (0 if (len(data) - start_index) % batch_size == 0 else 1)
+                          (0 if (len(data) - start_index) % batch_size == 0 else 1)
 
-                # Initialize the progress bar
                 with tqdm(total=total_steps, desc="Sending data", unit="batch") as pbar:
-                    # Send data in batches based on the client's request
                     for index in range(start_index, len(data), batch_size):
                         if not send_data:
-                            break  # Stop sending if the flag is reset
+                            break
+
                         input_batch = data[index:index + batch_size].tolist()
                         label_batch = labels[index:index + batch_size].tolist()
                         message = {
@@ -61,14 +55,20 @@ async def websocket_endpoint(websocket: WebSocket):
                             "label": label_batch
                         }
                         await websocket.send_json(message)
-                        await asyncio.sleep(0.0005)  # Simulate processing delay
-                        pbar.update(1)  # Update progress bar
+                        pbar.update(1) 
 
+                        # Non-blocking acknowledgment check
+                        try:
+                            await asyncio.wait_for(websocket.receive_text(), timeout=10)  
+                            # print("Acknowledgment received!") 
+                        except asyncio.TimeoutError:
+                            print("Timeout, waiting for next batch request..")
+                            break  
+
+                # Indicate completion if we sent all batches
                 if send_data:
-                    # Indicate completion only if not stopped prematurely
                     await websocket.send_json({"finished": True})
-
-            # Handle stop command if implemented in the future
+                    break
 
     except WebSocketDisconnect:
         print("Client disconnected")
