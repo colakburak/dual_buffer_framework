@@ -59,11 +59,14 @@ async def websocket_endpoint(websocket: WebSocket):
 
                         # Non-blocking acknowledgment check
                         try:
-                            await asyncio.wait_for(websocket.receive_text(), timeout=10)  
-                            # print("Acknowledgment received!") 
+                            message_str = await asyncio.wait_for(websocket.receive_text(), timeout=10)
+                            message = json.loads(message_str)
+                            if message.get("command") != "ACK":
+                                print(f"Unexpected acknowledgment message: {message}. Expected 'ACK' command")
+                                # You might choose to handle this as an error condition 
                         except asyncio.TimeoutError:
                             print("Timeout, waiting for next batch request..")
-                            break  
+                            break 
 
                 # Indicate completion if we sent all batches
                 if send_data:
