@@ -14,13 +14,14 @@ class DualBufferSystem:
     def __init__(self, window_size, ws_conn_uri):
         self.window_size = window_size
         self.ws_conn_uri = ws_conn_uri  
+        self.buffer_id_counter = 0 
 
         self.buffer_state = BufferState.FILLING
-        self.processing_finished = True
+        # self.processing_finished = True
 
         self.active_buffer = {'input_data': [], 'label': []}
         self.processing_buffer = {'input_data': [], 'label': []}
-        asyncio.create_task(self.trigger_buffer_switch()) 
+        # asyncio.create_task(self.trigger_buffer_switch()) 
 
 
         self.lock = asyncio.Lock()
@@ -43,65 +44,74 @@ class DualBufferSystem:
         async with websockets.connect(self.ws_conn_uri) as websocket:
             self.logger.info("Connected!")
             await websocket.send(json.dumps({"command": "start"}))
+
             while True:
-                # Request data (if needed)
-                # await websocket.send(json.dumps({"command": "start"}))  
-
                 data = await websocket.recv()
-                data = json.loads(data)  
+                data = json.loads(data) 
 
-                if data.get('finished'):  # Check for the 'finished' key
+                if data.get('finished'):   
                     self.logger.info("Received 'finished' signal from server")
-                    await self.shutdown()  # Initiate shutdown
-                    break 
+                      
+                    break
 
                 async with self.lock:
                     self.active_buffer['input_data'].extend(data['input_data'])
                     self.active_buffer['label'].extend(data['label'])
+                    await self.send_acknowledgment(websocket) 
 
-                await self.send_acknowledgment(websocket)  
-
-                # Consolidated buffer check
-                if len(self.active_buffer['input_data']) >= self.window_size and self.processing_finished:
-                    await self.trigger_buffer_switch()  
+                if len(self.active_buffer['input_data']) >= self.window_size:
+                    await self.trigger_buffer_switch() 
+            
+            # await self.shutdown()
+            # Server communication completed, now start buffer processing
+            # self.processing_task = asyncio.create_task(self.process_data()) 
 
     async def process_data(self):
+        # self.logger.info("Processing Started") 
         while True:
             await self.switch_event.wait() 
-            self.switch_event.clear()  # Clear after receiving the signal
-
+            self.switch_event.clear()
             async with self.lock:
                 if self.buffer_state == BufferState.PROCESSING:
-                    self.logger.debug("Processing data from buffer with state: %s", self.buffer_state)
-                    data_window = np.array(self.processing_buffer)
+                    self.buffer_id_counter += 1
+                    self.logger.info("Processing Buffer #%d", self.buffer_id_counter)
+                    data_window = np.array(self.processing_buffer['input_data'])  # Ensure you copy the data
                     # ... (Your processing logic) ...
 
-            self.processing_finished = True
-            await self.trigger_buffer_switch() # Trigger a new switch after processing
+                    # Directly switch buffer states when processing is done
+                    self.buffer_state = BufferState.FILLING 
+                    self.processing_buffer, self.active_buffer = self.active_buffer, {'input_data': [], 'label': []} 
+                    self.switch_event.set()  # Signal data ingestion task
 
     async def trigger_buffer_switch(self):
         async with self.lock:
-            if self.buffer_state == BufferState.PROCESSING:  # Check if ready to switch
-                self.buffer_state = BufferState.SWITCHING  # Temporarily mark as switching
+            if self.buffer_state == BufferState.FILLING:
+                self.buffer_state = BufferState.PROCESSING
                 self.processing_buffer, self.active_buffer = self.active_buffer, {'input_data': [], 'label': []}
-                self.buffer_state = BufferState.FILLING  # Reset state immediately
-                self.switch_event.set()  # Signal processing task 
+                self.switch_event.set()  # Signal processing task to start 
 
     async def send_acknowledgment(self, websocket):
-        await websocket.send("ack")  # Send acknowledgment 
+        ack_message = {"command": "ACK"}
+        await websocket.send(json.dumps(ack_message))
 
     async def shutdown(self):
         self.logger.info("Initiating shutdown")
-        # self.ingestion_task.cancel()
-        # self.processing_task.cancel()
-        # ...
+
+        # Cancel tasks (with 'await' for clean termination)
         try:
-            self.ingestion_task.cancel()
+            if isinstance(self.ingestion_task, asyncio.Task): 
+                await self.ingestion_task.cancel()
         except asyncio.CancelledError:
-            pass  # Ignore CancelledErrors during shutdown
+            pass  # Task was already cancelled or completed
 
         try:
-            self.processing_task.cancel()
+            if isinstance(self.processing_task, asyncio.Task):
+                await self.processing_task.cancel()
         except asyncio.CancelledError:
-            pass 
-        # ... (Potentially close WebSocket connections)
+            pass  # Task was already cancelled or completed
+
+        # WebSocket closure (Assuming your websocket object is available)
+        try:
+            await self.websocket.close()  # Add graceful close code if provided by your WebSocket library 
+        except AttributeError:
+            pass  # In case the websocket object might not be accessible here
