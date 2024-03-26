@@ -11,13 +11,14 @@ class BufferState(Enum):
     SWITCHING = 3
 
 class DualBufferSystem:
-    def __init__(self, window_size, ws_conn_uri):
+    def __init__(self, window_size, ws_conn_uri, processing_func):
         self.window_size = window_size
-        self.ws_conn_uri = ws_conn_uri  
+        self.ws_conn_uri = ws_conn_uri
+        self.processing_func = processing_func
         self.buffer_id_counter = 0 
 
         self.buffer_state = BufferState.FILLING
-        # self.processing_finished = True
+        self.processing_finished = False
 
         self.active_buffer = {'input_data': [], 'label': []}
         self.processing_buffer = {'input_data': [], 'label': []}
@@ -51,7 +52,8 @@ class DualBufferSystem:
 
                 if data.get('finished'):   
                     self.logger.info("Received 'finished' signal from server")
-                      
+                    self.processing_finished = True
+                    await self.trigger_buffer_switch() 
                     break
 
                 async with self.lock:
@@ -68,20 +70,22 @@ class DualBufferSystem:
 
     async def process_data(self):
         # self.logger.info("Processing Started") 
-        while True:
+        while not self.processing_finished or self.buffer_state == BufferState.PROCESSING:
             await self.switch_event.wait() 
             self.switch_event.clear()
             async with self.lock:
                 if self.buffer_state == BufferState.PROCESSING:
                     self.buffer_id_counter += 1
                     self.logger.info("Processing Buffer #%d", self.buffer_id_counter)
-                    data_window = np.array(self.processing_buffer['input_data'])  # Ensure you copy the data
-                    # ... (Your processing logic) ...
-
+                    # data_window = np.array(self.processing_buffer['input_data'])  # Ensure you copy the data
+                    # # ... (Your processing logic) ...
+                    await self.processing_func(np.array(self.processing_buffer['input_data']), np.array(self.processing_buffer['label']))
                     # Directly switch buffer states when processing is done
                     self.buffer_state = BufferState.FILLING 
                     self.processing_buffer, self.active_buffer = self.active_buffer, {'input_data': [], 'label': []} 
                     self.switch_event.set()  # Signal data ingestion task
+            if self.processing_finished and self.buffer_state != BufferState.PROCESSING:
+                break
 
     async def trigger_buffer_switch(self):
         async with self.lock:
@@ -97,21 +101,25 @@ class DualBufferSystem:
     async def shutdown(self):
         self.logger.info("Initiating shutdown")
 
-        # Cancel tasks (with 'await' for clean termination)
+        # Cancel tasks (no 'await' needed for task cancellation)
+        self.ingestion_task.cancel()
+        self.processing_task.cancel()
+
+        # Wait for the tasks to be cancelled
         try:
-            if isinstance(self.ingestion_task, asyncio.Task): 
-                await self.ingestion_task.cancel()
+            await self.ingestion_task
         except asyncio.CancelledError:
             pass  # Task was already cancelled or completed
 
         try:
-            if isinstance(self.processing_task, asyncio.Task):
-                await self.processing_task.cancel()
+            await self.processing_task
         except asyncio.CancelledError:
             pass  # Task was already cancelled or completed
 
-        # WebSocket closure (Assuming your websocket object is available)
+        # WebSocket closure
         try:
-            await self.websocket.close()  # Add graceful close code if provided by your WebSocket library 
-        except AttributeError:
-            pass  # In case the websocket object might not be accessible here
+            # Assuming self.websocket exists and holds your websocket connection
+            if hasattr(self, 'websocket'):
+                await self.websocket.close()  # Make sure your WebSocket connection variable is accessible
+        except Exception as e:  # Use a more specific exception if possible
+            self.logger.error(f"Error closing WebSocket: {e}")
